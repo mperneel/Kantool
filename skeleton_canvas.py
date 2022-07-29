@@ -28,10 +28,11 @@ class SkeletonCanvas(GeneralImageCanvas):
     """
     SkeletonCanvas regulates all modifications to the skeleton
     """
-    def __init__(self,skeleton, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self,master, **kwargs):
+        super().__init__(master, **kwargs)
 
-        self.skeleton = skeleton
+        self.skeleton = master.skeleton
+        self.settings = master.settings
         self.skeleton_name = ""
         self._image_photoimage = None
         self.keypoint_index = None
@@ -64,10 +65,10 @@ class SkeletonCanvas(GeneralImageCanvas):
         #import image
         os.chdir(self.wdir)
         image = cv2.imread(self.skeleton_name)
-        self.image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-        #Set initial zoom level
-        self.reset_zoom_level()
+        self.skeleton.image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        #also store a copy in this class
+        self.image = self.skeleton.image
 
         #Load annotations
         json_file = open("project\\skeleton.json")
@@ -107,6 +108,9 @@ class SkeletonCanvas(GeneralImageCanvas):
 
         self.retained_keypoints = [i for i, _ in enumerate(self.skeleton.keypoints)]
         #indices of retained keypoints
+        
+        #Set initial zoom level
+        self.reset_zoom_level()
 
         self.update_image(mode=0)
 
@@ -120,11 +124,14 @@ class SkeletonCanvas(GeneralImageCanvas):
             0 : the image is constructed from scratch\n
             1 : the code starts from the rescaled image (without any points or
             lines related to the skeleton).
+            2 : the code starts from the image with the skeleton drawn and highlights
+            The currently active keypoint category (when application is in
+            annotation_mode)
 
             The default is 0
         """
         #Check if there is a skeleton loaded
-        if self.image is None:
+        if self.skeleton.image is None:
             return
 
         #get scale and intercepts
@@ -136,57 +143,78 @@ class SkeletonCanvas(GeneralImageCanvas):
         if (mode == 0) or\
             (self.image_inter_scale != s):
             #resize skeleton
-            skeleton_height, skeleton_width = self.image.shape[:2]
-            self.image_inter = cv2.resize(self.image,
+            skeleton_height, skeleton_width = self.skeleton.image.shape[:2]
+            self.image_inter = cv2.resize(self.skeleton.image,
                                           dsize=(int(skeleton_width * s),
                                                  int(skeleton_height * s)))
             self.image_inter_scale = s
-
-        #actions which should always be executed
-        image_shown = self.image_inter.copy()
-
-        #draw lines
-        skeleton = self.skeleton
-        for i, _ in enumerate(skeleton.keypoints):
-            end_point = skeleton.coordinates[i]
-            parent = skeleton.parent[i]
-            if parent != -1:
-                #draw line from parent to child in color of parent
-                start_point = skeleton.coordinates[parent]
+        
+        if mode in [0, 1]:
+            
+            self.image_inter_1 = self.image_inter.copy()
+            
+            #draw lines
+            skeleton = self.skeleton
+            for i, _ in enumerate(skeleton.keypoints):
+                end_point = skeleton.coordinates[i]
+                parent = skeleton.parent[i]
+                if parent != -1:
+                    #draw line from parent to child in color of parent
+                    start_point = skeleton.coordinates[parent]
+                    color = skeleton.color[i]
+    
+                    start_point = tuple((start_point * s).astype(int))
+                    end_point = tuple((end_point * s).astype(int))
+    
+                    self.image_inter_1 = cv2.line(self.image_inter_1,
+                                                   start_point,
+                                                   end_point,
+                                                   color=color,
+                                                   thickness=self.settings.linewidth)
+    
+            #draw points
+            for i, _ in enumerate(skeleton.keypoints):
+                coordinates = skeleton.coordinates[i]
+                [x, y] = (coordinates * s).round().astype(int)
                 color = skeleton.color[i]
-
-                start_point = tuple((start_point * s).astype(int))
-                end_point = tuple((end_point * s).astype(int))
-
-                image_shown = cv2.line(image_shown,
-                                       start_point,
-                                       end_point,
-                                       color=color,
-                                       thickness=3)
-
-        #draw points
-        for i, _ in enumerate(skeleton.keypoints):
-            coordinates = skeleton.coordinates[i]
+    
+                self.image_inter_1 = cv2.circle(self.image_inter_1,
+                                         (x, y),
+                                         radius=self.settings.point_size_skeleton,
+                                         color=color,
+                                         thickness=-1)
+    
+            #draw circle around active point
+            if self.keypoint_reactivated:
+                coordinates = self.skeleton.coordinates[self.keypoint_index]
+                [x, y] = (coordinates * s).round().astype(int)
+                color = self.skeleton.color[self.keypoint_index]
+    
+                self.image_inter_1 = cv2.circle(self.image_inter_1,
+                                         (x, y),
+                                         radius=self.settings.circle_radius,
+                                         color=color,
+                                         thickness=self.settings.linewidth)
+        
+        #action which should always be performed
+        image_shown = self.image_inter_1.copy()
+        
+        if (mode in [0, 1, 2]) and\
+            (self.master.mode == 0) and\
+            (self.settings.highlight_skeleton_keypoint):
+            #draw circle around active keypoint category
+            annotations = self.master.annotations
+            
+            coordinates = self.skeleton.coordinates[annotations.keypoint_index]
             [x, y] = (coordinates * s).round().astype(int)
-            color = skeleton.color[i]
+            color = self.skeleton.color[annotations.keypoint_index]
 
             image_shown = cv2.circle(image_shown,
                                      (x, y),
-                                     radius=8,
+                                     radius=self.settings.circle_radius,
                                      color=color,
-                                     thickness=-1)
-
-        #draw circle around active point
-        if self.keypoint_reactivated:
-            coordinates = self.skeleton.coordinates[self.keypoint_index]
-            [x, y] = (coordinates * s).round().astype(int)
-            color = self.skeleton.color[self.keypoint_index]
-
-            image_shown = cv2.circle(image_shown,
-                                     (x, y),
-                                     radius=20,
-                                     color=color,
-                                     thickness=3)
+                                     thickness=self.settings.linewidth)
+            
 
         #slice image_shown so slice fits in self.skeleton_canvas
         uw = self.winfo_width()
@@ -213,12 +241,8 @@ class SkeletonCanvas(GeneralImageCanvas):
         event : tkinter.Event
             ButtonPress event
         """
-        #get scale
-        s = self.zoom_level
-
-        #calculate coordinates
-        x = (event.x + self.zoom_delta_x) / s
-        y = (event.y + self.zoom_delta_y) / s
+        #get coordinates
+        x, y = self.get_image_coordinates(event)
 
         #set keypoint properties
         KeypointProperties(self,
@@ -237,16 +261,13 @@ class SkeletonCanvas(GeneralImageCanvas):
         event : tkinter.Event
             Motion event
         """
-        #get scale
-        s = self.zoom_level
-
+        
         #update mouse position
         self.mouse_x = event.x
         self.mouse_y = event.y
 
-        #update coordinates
-        x = (event.x + self.zoom_delta_x) / s
-        y = (event.y + self.zoom_delta_y) / s
+        #get coordinates
+        x, y = self.get_image_coordinates(event)
 
         if (x <= self.image.shape[1]) and\
             (y <= self.image.shape[0]):
@@ -271,17 +292,14 @@ class SkeletonCanvas(GeneralImageCanvas):
         if self.master.mode != 1:
             #modifying the skeleton is only allowed in skeleton mode
             return
-        
-        #if a keypoint was activated, deactivate it first
-        if self.keypoint_reactivated:
-            self.keypoint_reactivated = False
+                
+        #get scale        
+        s = self.zoom_level
 
         #get coordinates
-        s = self.zoom_level
-        x = (event.x  + self.zoom_delta_x) / s
-        y = (event.y  + self.zoom_delta_y) / s
+        x, y = self.get_image_coordinates(event)
         location = np.array([x, y])
-
+        
         #check if no point was re-activated
         critical_distance = 10
         if len(self.skeleton.keypoints) > 0:
@@ -295,6 +313,10 @@ class SkeletonCanvas(GeneralImageCanvas):
                 #keypoint coordinate memory is created
                 self.current_keypoint_coordinates_memory = \
                     self.skeleton.coordinates[self.keypoint_index].copy()
+                    
+                #update image
+                self.update_image(mode=1)
+                return
 
         #check if a new keypoint shoud be created
         if not self.keypoint_reactivated:
@@ -302,7 +324,11 @@ class SkeletonCanvas(GeneralImageCanvas):
             if (self.image is not None) and\
                 (x <= self.image.shape[1]) and\
                 (y <= self.image.shape[0]):
-                self.new_keypoint(event)
+                self.new_keypoint(event)                
+        
+        else: #self.keypoint_reactivated:
+            #if a keypoint was activated, deactivate it
+            self.keypoint_reactivated = False
 
         #update image
         self.update_image(mode=1)
@@ -367,6 +393,10 @@ class SkeletonCanvas(GeneralImageCanvas):
                 #save skeleton and reconfigure whole project
                 self.save_skeleton()
                 self.reconfigure_project()
+                
+                #reload image and annotation data to handle added and/or deleted
+                #keypoints
+                self.master.annotation_canvas.reload_image()
             elif not answer:
                 #reload original skeleton
                 self.load_skeleton()
@@ -557,7 +587,7 @@ class SkeletonCanvas(GeneralImageCanvas):
 
     def prepare_for_annotation_mode(self):
         """
-        Prepare the skeleton canvas to switcht from skeleton mode to annotation mode\n
+        Prepare the skeleton canvas to switch from skeleton mode to annotation mode\n
         If one want to switch the mode from skeleton mode to annotation mode,
         this method checks if there are unsaved changes to the skeleton. If this
         is the case, the user is asked if the changes should be saved or not.
@@ -570,7 +600,8 @@ class SkeletonCanvas(GeneralImageCanvas):
                                                  message)
             if answer is True:
                 #Save changes
-                self.save_skeleton()
+                self.save()
+                
             elif answer is False:
                 #re-import original skeleton
                 self.load_skeleton()
@@ -605,3 +636,35 @@ class SkeletonCanvas(GeneralImageCanvas):
         else:
             ChangeOrderKeypoints(master=self)
             
+    def get_image_coordinates(self, event):
+        """
+        Get the image coordinates. The image coordinates are calculated by
+        correcting the event coordinates for translation and scale used during
+        visualisation
+        
+        Parameters
+        ----------
+        event : tkinter.Event
+            Motion event
+    
+        Returns
+        -------
+        x : float
+            x coordinate (horizontal axis, origin=left side)
+        y : float
+            y coordinate (vertical axis, origin=top)
+    
+        """
+        #get scale of image        
+        s = self.zoom_level
+        
+        #get x and y coordinate of event
+        x = (event.x + self.zoom_delta_x - self.bd) / s
+        y = (event.y + self.zoom_delta_y - self.bd) / s
+        
+        #limit coordinates to size image
+        x = max(min(x, self.skeleton.image.shape[1] - 1), 0)
+        y = max(min(y, self.skeleton.image.shape[0] - 1), 0)
+        
+        return (x, y)
+                

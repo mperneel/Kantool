@@ -20,6 +20,9 @@ class RenameObject(tk.Toplevel):
         #initiate frame
         tk.Toplevel.__init__(self, master)
         self.master = master
+        
+        #get annotations
+        self.annotations = self.master.annotations
 
         #set title of child window
         self.title("Rename object")
@@ -46,7 +49,7 @@ class RenameObject(tk.Toplevel):
                                 width=10)
         self.cancel_btn = tk.Button(self.btn_frame,
                                     text="Cancel",
-                                    #command=self.destroy(),
+                                    command=self.cancel,
                                     width=10)
         self.ok_btn.grid(row=0, column=0, padx=10, pady=10)
         self.cancel_btn.grid(row=0, column=1, padx=10, pady=10)
@@ -69,18 +72,22 @@ class RenameObject(tk.Toplevel):
         
         #change annotation datasets
         if self.master.master.annotation_canvas.mask_mode:
-            self.master.master.annotation_canvas.rename_mask(current_name=self.current_name,
-                                          new_name=obj_new_name)
+            self.annotations.rename_mask(current_name=self.current_name,
+                                         new_name=obj_new_name)
             
             #update listbox
             self.master.load_masks()
         else:
-            self.master.master.annotation_canvas.rename_object(current_name=self.current_name,
-                                            new_name=obj_new_name)
+            self.annotations.rename_object(current_name=self.current_name,
+                                           new_name=obj_new_name)
             
             #update listbox
             self.master.load_objects()
             
         #destroy child windows
+        self.destroy()
+        
+    def cancel(self):
+        #destroy child window
         self.destroy()
         

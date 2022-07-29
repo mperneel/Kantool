@@ -10,6 +10,7 @@ regulates all modifications to the skeleton
 #%% import packages
 import tkinter as tk
 from tkinter import ttk
+import pandas as pd
 
 from rename_object import RenameObject
 #%%
@@ -21,6 +22,9 @@ class ObjectCanvas(ttk.Notebook):
         
         #assign master
         self.master = master
+        
+        #assign annotation object
+        self.annotations = master.annotations
         
         #assign image object
         self.image = self.master.annotation_canvas.image
@@ -165,7 +169,16 @@ class ObjectCanvas(ttk.Notebook):
         self.list_objects.delete(0, tk.END)
         
         #load new objects
-        names = self.master.annotation_canvas.names
+        names = self.annotations.names
+        
+        #check if there are names defined at all
+        if len(names) == 0:
+            return
+        
+        #if last object is a preallocated object, its name shouldn't be shown (yet)
+        if self.annotations.last_object_empty:
+            names = names.iloc[:-1,:]
+            
         for i in names.index:
             self.list_objects.insert(tk.END, names.loc[i,"name"])
     
@@ -219,7 +232,9 @@ class ObjectCanvas(ttk.Notebook):
                
         if self.active_object_index is not None:
             obj_name = self.list_objects.get(self.active_object_index)
-            self.master.annotation_canvas.update_active_object(obj_name=obj_name) 
+            self.annotations.update_active_object(obj_name=obj_name)
+            
+        self.master.annotation_canvas.update_image(mode=3)
     
     def rename_object(self):
         #this method is integrated in the software architecture, but disabled,
@@ -236,7 +251,7 @@ class ObjectCanvas(ttk.Notebook):
         self.list_masks.delete(0, tk.END)
         
         #load new masks
-        names = self.master.annotation_canvas.names_masks
+        names = self.annotations.names_masks
         for i in names.index:
             self.list_masks.insert(tk.END, names.loc[i,"name"])
         
@@ -269,7 +284,45 @@ class ObjectCanvas(ttk.Notebook):
             if type(mask_name) is tuple:
                 mask_name = mask_name[0]
                 
-            self.master.annotation_canvas.update_active_mask(mask_name=mask_name) 
+            self.update_active_mask(mask_name=mask_name)
+            
+    def update_active_mask(self, mask_id=None, mask_name=None):
+        """
+        Change the active mask
+        
+        Only one of the inputs mask_id and mask_name should be defined
+
+        Parameters
+        ----------
+        mask_id : int, optional
+            Identification index of the mask. The default is None.
+        mask_name : str, optional
+            Name of the maks. The default is None.
+        """
+        
+        if not self.masks_visible:
+            #if masks are not visible, no modifications to the masks may be done
+            return
+        
+        #process arguments
+        if mask_id is None and mask_name is None:
+            raise ValueError("mask_id and mask_name may not be both None")
+        elif mask_id is not None and mask_name is not None:
+            raise ValueError("mask_id and mask_name may not be given both")
+        elif mask_name is not None:
+            #only mask_name is given
+            #get mask_id
+            mask_id = self.annotations.get_mask_id(mask_name)
+            
+        #first store all adaptations to the current mask (if necessary) 
+        #to the general dataframes
+        if self.annotations.current_mask_confirmed is False:
+            #confirm current mask
+            self.annotations.new_mask()
+            
+        self.annotations.update_active_mask(mask_id)
+                
+        self.master.annotation_canvas.update_image(mode=0)
     
     def delete_mask(self):        
         #this method may only be invoked if object_canvas is active from the
@@ -286,7 +339,12 @@ class ObjectCanvas(ttk.Notebook):
             return
         
         mask_index = self.list_masks.curselection()[0]
-        mask_name=self.list_masks.get(mask_index)[0]
+        mask_name=self.list_masks.get(mask_index)
+        
+        if type(mask_name) is not int:
+            #mask name is a list
+            mask_name = mask_name[0]
+            
         self.list_masks.delete(mask_index)
         self.master.annotation_canvas.delete_mask(mask_name=mask_name)
     
@@ -355,3 +413,57 @@ class ObjectCanvas(ttk.Notebook):
         else:
             #mode: creating masks
             self.master.annotation_canvas.mask_mode = True
+            
+    def new_object(self):
+        """
+        Create a new object
+        """
+        if len(self.skeleton.keypoints) == 0 :
+            #if len(self.skeleton.keypoints) == 0, this means there is currently
+            #no project loaded
+            
+            #therefore, we return immediately
+            return
+        
+        if self.mask_mode:
+            #if we are in mask mode, a new mask should be initiated
+            self.new_mask()
+            return
+        
+        self.marginal_keypoint_index = 0
+        self.keypoint_index = self.skeleton.func_annotation_order[self.marginal_keypoint_index]
+        
+        #remove all objects with only NaN coordinates
+        self.annotations.remove_nan_objects()
+        
+        #load all names still present in object_canvas
+        self.master.object_canvas.load_objects()
+    
+        #Add new row for new object
+        df = self.annotations
+        new_row = pd.DataFrame(columns=df.columns,
+                               index=[0],
+                               dtype=float)
+        df = pd.concat([df, new_row], ignore_index=True)
+        self.annotations = df
+        
+        self.object = self.annotations.shape[0] - 1
+        #Python is zero based, so to get the index of the last object,
+        #we call the number of objects and substract one
+        
+        #add new generic name to self.names
+        if len(self.names) > 0:
+            new_name = str(int(self.names["name"].iloc[-1]) + 1)
+            new_row = pd.DataFrame(data=[[self.object, new_name]],
+                                   columns=["obj", "name"])
+            self.names = pd.concat([self.names, new_row],
+                                   ignore_index=True)
+        else: #len(self.names) == 0:
+            self.names = pd.DataFrame(data=[[0, '0']],
+                                      columns=['obj', 'name'])
+            
+        #update state booleans
+        self.keypoint_reactivated = False
+        
+        #update image
+        self.update_image(mode=0)

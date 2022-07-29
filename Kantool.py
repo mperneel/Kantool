@@ -4,10 +4,10 @@ Created on Wed Jun 23 08:27:07 2021
 
 @author: Maarten Perneel
 
-Master script for the CoBRA pointer application. In this script, the Application
+Master script for the Kantool application. In this script, the Application
 class is defined, which codes for the main window of the application
 """
-#%% Load packages
+# %% Load packages
 import os
 import shutil
 import tkinter as tk
@@ -15,6 +15,7 @@ import tkinter.filedialog as tkfiledialog
 import tkinter.messagebox as tkmessagebox
 import numpy as np
 import ctypes
+import json
 
 from skeleton import Skeleton
 from annotation_canvas import AnnotationCanvas
@@ -22,148 +23,101 @@ from skeleton_canvas import SkeletonCanvas
 from new_project import NewProject
 from export_dataset import ExportDataset
 from object_canvas import ObjectCanvas
-from annotation_settings import AnnotationSettings
-from skeleton_settings import SkeletonSettings
+from settings_dialog import SettingsDialog
+from annotations import Annotations
+from settings import Settings
+from import_mask_template_dialog import ImportMaskTemplateDialog
+from save_mask_template_dialog import SaveMaskTemplateDialog
+from mask_template_manager import MaskTemplateManager
+from ask_mask_template import AskMaskTemplate
 
-#%% Main application
+# %% Main application
+
 
 class Application(tk.Frame):
-    """
-    Master window of CoBRA pointer
     
-    Attributes
-    -----
-    self.master : tkinter.Tk
-        Master object of the application
-    
-    self.program_dir : str
-        Directory to the program files
-    
-    self.mode : int
-        Mode of the application\n
-        - 0 annotation mode\n
-        - 1 skeleton mode
-        
-    self.wdir : str
-        Directory of the project
-    
-    self.skeleton : Skeleton
-        Skeleton containing all information about the skaleton along which is annotated
-        
-    self.annotation_canvas : AnnotationCanvas
-        Canvas to display the skeleton
-    
-    self.skeleton_canvas : SkeletonCanvas
-        Canvas to display the image and its annotations
-    
-    Methods
-    -----
-    self.launch_help
-        Launch the help file
-        
-    self.resize_app
-        Adjust the position of the sash when te application is resized
-        
-    self.set_mode
-        Set mode of application
-        
-    self.open_project
-        Open a project
-        
-    self.delete_keypoint
-        Decisive method to delete a keypoint of an object or a keypoint of the
-        skeleton
-        
-    self.save
-        Decisive method to save the annotations of the current image or the skeleton
-        
-    self.new_project
-        Create a new project
-        
-    self.export_dataset
-        Export the project to a dataset of a chosen format
-        
-    self.import_images
-        Import images in the project
-    
-    """
+
     def __init__(self, master=None, program_dir=None):
-        #initiate frame
+        # initiate frame
         tk.Frame.__init__(self, master)
         self.pack()
         self.master = master
-        
-        #make sure the application fills the whole window
+
+        # make sure the application fills the whole window
         self.master.state('zoomed')
         root.update()
 
-        #Declare attributes
-        self.program_dir = program_dir #path to software files
-        self.mode = 0 #annotation mode
-        self.wdir = None #working directory
+        # Declare attributes
+        self.program_dir = program_dir  # path to software files
+        self.mode = 0  # annotation mode
+        self.wdir = None  # working directory
 
-        #get useable width and height (expressed in pixels)
-        self.uw = root.winfo_width() #useable_width
-        self.uh = root.winfo_height() #useable_height   
+        # get useable width and height (expressed in pixels)
+        self.uw = root.winfo_width()  # useable_width
+        self.uh = root.winfo_height()  # useable_height
 
-        #format application
+        # format application
 
-        #initiate main panel
+        # initiate main panel
         self.main_panel = tk.PanedWindow(bd=0,
                                          bg="black",
                                          orient=tk.HORIZONTAL)
         self.main_panel.pack(fill=tk.BOTH,
                              expand=True)
 
-        #set title
-        self.master.title("CoBRA pointer")
-        
-        #Declare attributes belonging to custom classes
-        #skeleton
+        # set title
+        self.master.title("Kantool")
+
+        # Declare attributes belonging to custom classes
+        # skeleton
         self.skeleton = Skeleton()
-        
-        #canvas to show image
-        self.annotation_canvas = AnnotationCanvas(skeleton=self.skeleton,
-                                                  master=self,
+
+        # annotations
+        self.annotations = Annotations(master=self)
+
+        # settings
+        self.settings = Settings()
+
+        # canvas to show image
+        self.annotation_canvas = AnnotationCanvas(master=self,
                                                   bd=10,
                                                   width=self.uw * 0.7,
                                                   height=self.uh)
-        
-        #canvas to show skeleton
-        self.skeleton_canvas = SkeletonCanvas(skeleton=self.skeleton,
-                                              master=self,
+
+        # canvas to show skeleton
+        self.skeleton_canvas = SkeletonCanvas(master=self,
                                               bd=10,
                                               width=self.uw * 0.15,
                                               height=self.uh*0.5)
-        
-        #canvas with masks
+
+        # canvas with masks
         self.object_canvas = ObjectCanvas(master=self,
-                                      width=int(self.uw * 0.15),
-                                      height=int(self.uh*0.5))
-        
-        #add annotation canvas
+                                          width=int(self.uw * 0.15),
+                                          height=int(self.uh*0.5))
+
+        # add annotation canvas
         self.main_panel.add(self.annotation_canvas)
 
-        #create second paned window on the left side to add skeleton_canvas 
-        #and object_canvas above each other
-        self.right_panel = tk.PanedWindow(self.main_panel, 
-                                        bd=0,
-                                        bg="black",
-                                        orient=tk.VERTICAL)
-        
+        # create second paned window on the left side to add skeleton_canvas
+        # and object_canvas above each other
+        self.right_panel = tk.PanedWindow(self.main_panel,
+                                          bd=0,
+                                          bg="black",
+                                          orient=tk.VERTICAL)
+
         self.main_panel.add(self.right_panel)
-        
-        #add skeleton canvas
+
+        # add skeleton canvas
         self.right_panel.add(self.skeleton_canvas)
-        
-        #add mask canvas
+
+        # add mask canvas
         self.right_panel.add(self.object_canvas)
 
-        #configure menu
+        # configure menu
         self.menubar = tk.Menu(self.master)
         self.master.config(menu=self.menubar)
 
-        #file menu
+        # file menu
         self.file_menu = tk.Menu(self.menubar, tearoff=False)
         self.file_menu.add_command(label="Open project (Ctrl+Shift+O)",
                                    command=self.open_project)
@@ -189,62 +143,83 @@ class Application(tk.Frame):
                                    command=self.export_dataset)
         self.menubar.add_cascade(label="File", menu=self.file_menu)
 
-        self.master.bind("<Control-Shift-O>", lambda event: self.open_project())
+        self.master.bind("<Control-Shift-O>",
+                         lambda event: self.open_project())
         self.master.bind("<Control-Shift-N>", lambda event: self.new_project())
-        self.master.bind("<Control-o>", lambda event: self.annotation_canvas.open_image())
-        self.master.bind("<Control-w>", lambda event: self.annotation_canvas.close_image())
-        self.master.bind("<Control-Delete>", lambda event: self.annotation_canvas.delete_object())
-        self.master.bind("<F7>", lambda event: self.annotation_canvas.switch_image(direction=-1))
-        self.master.bind("<F8>", lambda event: self.annotation_canvas.switch_image(direction=1))
+        self.master.bind(
+            "<Control-o>", lambda event: self.annotation_canvas.open_image())
+        self.master.bind(
+            "<Control-w>", lambda event: self.annotation_canvas.close_image())
+        self.master.bind("<Control-Delete>",
+                         lambda event: self.annotation_canvas.delete_object())
+        self.master.bind(
+            "<F7>", lambda event: self.annotation_canvas.switch_image(direction=-1))
+        self.master.bind(
+            "<F8>", lambda event: self.annotation_canvas.switch_image(direction=1))
         self.master.bind("<Control-i>", lambda event: self.import_images())
         self.master.bind("<F5>", lambda event: self.export_dataset())
         self.master.bind("<Key-Delete>", lambda event: self.delete_keypoint())
-        #Delete is bound to two methods therefore a method in the Application
-        #class is provoked, which activates on it's turn
-        #self.skeleton_canvas.delete_keypoint() or
-        #self.annotation_canvas.delete_keypoint(), depending on the mode of the
-        #application (annotation mode or skeleton mode)
+        # Delete is bound to two methods therefore a method in the Application
+        # class is provoked, which activates on it's turn
+        # self.skeleton_canvas.delete_keypoint() or
+        # self.annotation_canvas.delete_keypoint(), depending on the mode of the
+        # application (annotation mode or skeleton mode)
 
         self.master.bind("<Control-s>", lambda event: self.save())
-        #Save is bound to two methods, therefore, a method in the Application
-        #class is first provoked, which activates on it's turn the appropriate
-        #method of SkeletonCanvas or AnnotationCanvas
+        # Save is bound to two methods, therefore, a method in the Application
+        # class is first provoked, which activates on it's turn the appropriate
+        # method of SkeletonCanvas or AnnotationCanvas
 
-        #disable all menu items which may only be used when a project is opened
+        # disable all menu items which may only be used when a project is opened
         self.file_menu.entryconfig("Open image (Ctrl+O)", state="disabled")
         self.file_menu.entryconfig("Close image (Ctrl+W)", state="disabled")
-        self.file_menu.entryconfig("Save annotations (Ctrl+S)", state="disabled")
+        self.file_menu.entryconfig(
+            "Save annotations (Ctrl+S)", state="disabled")
         self.file_menu.entryconfig("Delete keypoint (Del)", state="disabled")
-        self.file_menu.entryconfig("Delete object (Ctrl+Del)", state="disabled")
+        self.file_menu.entryconfig(
+            "Delete object (Ctrl+Del)", state="disabled")
         self.file_menu.entryconfig("Previous image (F7)", state="disabled")
         self.file_menu.entryconfig("Next image (F8)", state="disabled")
         self.file_menu.entryconfig("Import image (Ctrl+I)", state="disabled")
         self.file_menu.entryconfig("Export dataset (F5)", state="disabled")
 
-        #mode menu
+        # edit menu
+        self.edit_menu = tk.Menu(self.menubar, tearoff=False)
+        self.edit_menu.add_command(label='Import mask template',
+                                   command=lambda: self.import_mask_template())
+        self.edit_menu.add_command(label='Save mask template',
+                                   command=lambda: self.save_mask_template())
+        self.edit_menu.add_command(label='Mask template manager',
+                                   command=lambda: self.manage_mask_templates())
+        self.menubar.add_cascade(label="Edit", menu=self.edit_menu)
+        
+        # disable all menu items which may only be used when a project is opened
+        self.edit_menu.entryconfig("Import mask template", state="disabled")
+        self.edit_menu.entryconfig("Save mask template", state="disabled")
+        self.edit_menu.entryconfig("Mask template manager", state="disabled")
+
+        # mode menu
         self.mode_menu = tk.Menu(self.menubar, tearoff=False)
         self.mode_menu.add_command(label="Annotation",
                                    command=lambda: self.set_mode(0))
         self.mode_menu.add_command(label="Skeleton",
                                    command=lambda: self.set_mode(1))
         self.menubar.add_cascade(label="Mode", menu=self.mode_menu)
-        
-        #settings menu
+
+        # settings menu
         self.settings_menu = tk.Menu(self.menubar, tearoff=False)
-        self.settings_menu.add_command(label="Annotation settings",
-                                       command=lambda: self.modify_annotation_settings())
-        self.settings_menu.add_command(label="Skeleton settings",
-                                   command=lambda: self.modify_skeleton_settings())
+        self.settings_menu.add_command(label="Settings",
+                                       command=lambda: self.modify_settings())
         self.menubar.add_cascade(label="Settings", menu=self.settings_menu)
 
-        #help menu
+        # help menu
         self.help_menu = tk.Menu(self.menubar, tearoff=False)
         self.help_menu.add_command(label="Help (F1)", command=self.launch_help)
         self.menubar.add_cascade(label="Help", menu=self.help_menu)
 
         self.master.bind("<F1>", lambda event: self.launch_help())
 
-        #skeleton menu
+        # skeleton menu
         self.skeleton_menu = tk.Menu(self.menubar, tearoff=False)
         self.skeleton_menu.add_command(label="Change order keypoints",
                                        command=self.skeleton_canvas.change_order_keypoints)
@@ -255,14 +230,14 @@ class Application(tk.Frame):
         self.skeleton_menu.add_command(label="Change central keypoint",
                                        command=self.skeleton_canvas.change_central_keypoint)
 
-        #bind events to methods
+        # bind events to methods
         self.master.bind("<Configure>", lambda event: self.resize_app())
 
         self.master.bind("<Key-Return>",
                          lambda event: self.annotation_canvas.new_object())
-        #remark that the key is bound to self.master (root)
+        # remark that the key is bound to self.master (root)
 
-        #dimension self.window properly
+        # dimension self.window properly
         self.resize_app()
 
     def launch_help(self):
@@ -275,7 +250,7 @@ class Application(tk.Frame):
         """
         Adjust the position of the sash when te application is resized
         """
-        uw = root.winfo_width() #useable_width
+        uw = root.winfo_width()  # useable_width
         if self.uw != uw:
             uw_init = self.uw
             self.uw = uw
@@ -300,9 +275,9 @@ class Application(tk.Frame):
         """
 
         if mode == 0:
-            #Annotation
+            # Annotation
             if self.mode == 1:
-                #check if there are changes
+                # check if there are changes
                 permission = self.skeleton_canvas.prepare_for_annotation_mode()
 
                 if permission:
@@ -316,26 +291,45 @@ class Application(tk.Frame):
                     self.skeleton_canvas.configure(bg='#f0f0f0')
                     self.skeleton_canvas.reset_zoom_level()
                     self.annotation_canvas.reset_zoom_level()
-                    self.menubar.delete(3)
+                    self.menubar.delete(2, 5)
+                    self.menubar.add_cascade(
+                        label="Edit", menu=self.edit_menu)
+                    self.menubar.add_cascade(
+                        label="Mode", menu=self.mode_menu)
+                    self.menubar.add_cascade(
+                        label="Settings", menu=self.settings_menu)
+                    self.menubar.add_cascade(
+                        label="Help", menu=self.help_menu)
 
-                    self.file_menu.entryconfig("Open project (Ctrl+Shift+O)", state="normal")
-                    self.file_menu.entryconfig("New project (Ctrl+Shift+N)", state="normal")
+                    self.file_menu.entryconfig(
+                        "Open project (Ctrl+Shift+O)", state="normal")
+                    self.file_menu.entryconfig(
+                        "New project (Ctrl+Shift+N)", state="normal")
                     if self.wdir is not None:
-                        self.file_menu.entryconfig("Open image (Ctrl+O)", state="normal")
-                        self.file_menu.entryconfig("Close image (Ctrl+W)", state="normal")
-                        self.file_menu.entryconfig("Save annotations (Ctrl+S)", state="normal")
-                        self.file_menu.entryconfig("Delete keypoint (Del)", state="normal")
-                        self.file_menu.entryconfig("Delete object (Ctrl+Del)", state="normal")
-                        self.file_menu.entryconfig("Previous image (F7)", state="normal")
-                        self.file_menu.entryconfig("Next image (F8)", state="normal")
-                        self.file_menu.entryconfig("Import image (Ctrl+I)", state="normal")
-                        self.file_menu.entryconfig("Export dataset (F5)", state="normal")
-
+                        self.file_menu.entryconfig(
+                            "Open image (Ctrl+O)", state="normal")
+                        self.file_menu.entryconfig(
+                            "Close image (Ctrl+W)", state="normal")
+                        self.file_menu.entryconfig(
+                            "Save annotations (Ctrl+S)", state="normal")
+                        self.file_menu.entryconfig(
+                            "Delete keypoint (Del)", state="normal")
+                        self.file_menu.entryconfig(
+                            "Delete object (Ctrl+Del)", state="normal")
+                        self.file_menu.entryconfig(
+                            "Previous image (F7)", state="normal")
+                        self.file_menu.entryconfig(
+                            "Next image (F8)", state="normal")
+                        self.file_menu.entryconfig(
+                            "Import image (Ctrl+I)", state="normal")
+                        self.file_menu.entryconfig(
+                            "Export dataset (F5)", state="normal")
+                        
                     self.mode = mode
-        else: #mode == 1:
-            #Skeleton
+        else:  # mode == 1:
+            # Skeleton
             if self.mode == 0:
-                #close current image
+                # close current image
                 self.annotation_canvas.prepare_for_skeleton_mode()
 
                 self.main_panel.forget(self.annotation_canvas)
@@ -343,23 +337,41 @@ class Application(tk.Frame):
                 self.skeleton_canvas.configure(bg='#ff1a1a')
                 self.update()
                 self.skeleton_canvas.reset_zoom_level()
-                self.menubar.delete(3)
-                self.menubar.add_cascade(label="Skeleton", menu=self.skeleton_menu)
-                self.menubar.add_cascade(label="Help", menu=self.help_menu)
+                self.menubar.delete(2, 5)
+                self.menubar.add_cascade(
+                    label="Mode", menu=self.mode_menu)
+                self.menubar.add_cascade(
+                    label="Skeleton", menu=self.skeleton_menu)
+                self.menubar.add_cascade(
+                    label="Settings", menu=self.settings_menu)
+                self.menubar.add_cascade(
+                    label="Help", menu=self.help_menu)
 
-                self.file_menu.entryconfig("Open project (Ctrl+Shift+O)", state="disabled")
-                self.file_menu.entryconfig("New project (Ctrl+Shift+N)", state="disabled")
-                self.file_menu.entryconfig("Open image (Ctrl+O)", state="disabled")
-                self.file_menu.entryconfig("Close image (Ctrl+W)", state="disabled")
-                self.file_menu.entryconfig("Save annotations (Ctrl+S)", state="disabled")
-                self.file_menu.entryconfig("Delete keypoint (Del)", state="disabled")
-                self.file_menu.entryconfig("Delete object (Ctrl+Del)", state="disabled")
-                self.file_menu.entryconfig("Previous image (F7)", state="disabled")
+                self.file_menu.entryconfig(
+                    "Open project (Ctrl+Shift+O)", state="disabled")
+                self.file_menu.entryconfig(
+                    "New project (Ctrl+Shift+N)", state="disabled")
+                self.file_menu.entryconfig(
+                    "Open image (Ctrl+O)", state="disabled")
+                self.file_menu.entryconfig(
+                    "Close image (Ctrl+W)", state="disabled")
+                self.file_menu.entryconfig(
+                    "Save annotations (Ctrl+S)", state="disabled")
+                self.file_menu.entryconfig(
+                    "Delete keypoint (Del)", state="disabled")
+                self.file_menu.entryconfig(
+                    "Delete object (Ctrl+Del)", state="disabled")
+                self.file_menu.entryconfig(
+                    "Previous image (F7)", state="disabled")
                 self.file_menu.entryconfig("Next image (F8)", state="disabled")
-                self.file_menu.entryconfig("Import image (Ctrl+I)", state="disabled")
-                self.file_menu.entryconfig("Export dataset (F5)", state="disabled")
+                self.file_menu.entryconfig(
+                    "Import image (Ctrl+I)", state="disabled")
+                self.file_menu.entryconfig(
+                    "Export dataset (F5)", state="disabled")
 
                 self.mode = mode
+
+        self.update_visualisations()
 
     def open_project(self, path=None):
         """
@@ -372,11 +384,11 @@ class Application(tk.Frame):
             choose a directory. The default is None.
         """
         if path is None:
-            #ask for a filepath
+            # ask for a filepath
             path = tkfiledialog.askdirectory()
 
         if path != "":
-            #check if path refers to a valid project
+            # check if path refers to a valid project
 
             files_folders = os.listdir(path)
 
@@ -385,26 +397,26 @@ class Application(tk.Frame):
             if 'project' in files_folders:
                 skeleton_files = os.listdir(os.path.join(path, 'project'))
                 if ('skeleton.json' in skeleton_files) and\
-                    (('skeleton.jpg' in skeleton_files) or\
+                    (('skeleton.jpg' in skeleton_files) or
                      ('skeleton.png' in skeleton_files)):
-                    #path refers to a valid project
+                    # path refers to a valid project
                     valid_project = True
 
                     self.wdir = path
                     self.annotation_canvas.wdir = path
                     self.skeleton_canvas.wdir = path
 
-                    #load the skeleton
+                    # load the skeleton
                     if 'skeleton.jpg' in skeleton_files:
                         self.skeleton_canvas.skeleton_name = 'project\\skeleton.jpg'
                     elif 'skeleton.png' in skeleton_files:
                         self.skeleton_canvas.skeleton_name = 'project\\skeleton.png'
                     else:
-                        raise ValueError("project folder misses an image file " +\
+                        raise ValueError("project folder misses an image file " +
                                          "called 'skeleton.jpg' or 'skeleton.png'")
                     self.skeleton_canvas.load_skeleton()
 
-                    #load the first image and annotations (if present)
+                    # load the first image and annotations (if present)
                     image_found = False
                     i = -1
 
@@ -413,28 +425,43 @@ class Application(tk.Frame):
                         file = files_folders[i]
 
                         if (len(file.split('.')) == 2) and\
-                            (file.split('.')[1] in  ['jpg', 'png']):
+                                (file.split('.')[1] in ['jpg', 'png']):
                             image_found = True
                             self.annotation_canvas.load_image(os.path.join(path, file),
                                                               full_path=True)
                         elif i == len(files_folders) - 1:
                             image_found = True
 
-                    #activate all entries within the File menu
-                    self.file_menu.entryconfig("Open image (Ctrl+O)", state="normal")
-                    self.file_menu.entryconfig("Close image (Ctrl+W)", state="normal")
-                    self.file_menu.entryconfig("Save annotations (Ctrl+S)", state="normal")
-                    self.file_menu.entryconfig("Delete keypoint (Del)", state="normal")
-                    self.file_menu.entryconfig("Delete object (Ctrl+Del)", state="normal")
-                    self.file_menu.entryconfig("Previous image (F7)", state="normal")
-                    self.file_menu.entryconfig("Next image (F8)", state="normal")
-                    self.file_menu.entryconfig("Import image (Ctrl+I)", state="normal")
-                    self.file_menu.entryconfig("Export dataset (F5)", state="normal")
+                    # activate all entries within the File menu
+                    self.file_menu.entryconfig(
+                        "Open image (Ctrl+O)", state="normal")
+                    self.file_menu.entryconfig(
+                        "Close image (Ctrl+W)", state="normal")
+                    self.file_menu.entryconfig(
+                        "Save annotations (Ctrl+S)", state="normal")
+                    self.file_menu.entryconfig(
+                        "Delete keypoint (Del)", state="normal")
+                    self.file_menu.entryconfig(
+                        "Delete object (Ctrl+Del)", state="normal")
+                    self.file_menu.entryconfig(
+                        "Previous image (F7)", state="normal")
+                    self.file_menu.entryconfig(
+                        "Next image (F8)", state="normal")
+                    self.file_menu.entryconfig(
+                        "Import image (Ctrl+I)", state="normal")
+                    self.file_menu.entryconfig(
+                        "Export dataset (F5)", state="normal")
+                    self.edit_menu.entryconfig(
+                        "Import mask template", state="normal")
+                    self.edit_menu.entryconfig(
+                        "Save mask template", state="normal")
+                    self.edit_menu.entryconfig(
+                        "Mask template manager", state="normal")
                 else:
                     valid_project = False
             else:
                 valid_project = False
-        else: #path=""
+        else:  # path=""
             return
 
         if not valid_project:
@@ -451,27 +478,26 @@ class Application(tk.Frame):
         Decisive method to delete a keypoint of an object or a keypoint of the
         skeleton
         """
+        if self.mode == 1:
+            #delete a keypoint of the skeleton
+            self.skeleton_canvas.delete_keypoint()
+            return
+        
         if not self.annotation_canvas.mask_mode:
-            #annotation_canvas is in annotation mode
-            if self.mode == 0:
-                #annotation mode
-                self.annotation_canvas.delete_keypoint()
-            else: #self.mode == 1:
-                self.skeleton_canvas.delete_keypoint()
-        else: #self.annotation_canvas.mask_mode:
-            #annotation_canvas is in mask mode
-            if self.mode == 0:
-                #application is in annotation mode
-                self.annotation_canvas.delete_mask_point()
+            # annotation_canvas is in annotation mode            
+            self.annotation_canvas.delete_keypoint()
+        else:  # self.annotation_canvas.mask_mode:
+            # annotation_canvas is in mask mode
+            self.annotation_canvas.delete_mask_point()
 
     def save(self):
         """
         Decisive method to save the annotations of the current image or the skeleton
         """
         if self.mode == 0:
-            #annotation mode
+            # annotation mode
             self.annotation_canvas.save()
-        else: #self.mode == 1:
+        else:  # self.mode == 1:
             self.skeleton_canvas.save()
 
     def new_project(self):
@@ -485,58 +511,94 @@ class Application(tk.Frame):
         Export the project to a dataset of a chosen format
         """
         ExportDataset(self)
-        
+
     def import_images(self):
         """
         Import images
         """
-        #check if a project is loaded
+        # check if a project is loaded
         if self.wdir is None:
             return
 
         #import images
         first_file = True
         files_list = os.listdir(self.wdir)
-        files = tkfiledialog.askopenfilenames(filetypes=[("Images", ".png .jpg")])
+        files = tkfiledialog.askopenfilenames(
+            filetypes=[("Images", ".png .jpg")])
+        
+        if self.settings.ask_for_mask_template:
+            AskMaskTemplate(self)
+        else:
+            self.settings.default_mask_template = None
+        
         for filepath in files:
-            
+
             if os.path.split(filepath)[1] in files_list:
-                #there is a file with the same name in the project directory
+                # there is a file with the same name in the project directory
                 message = os.path.split(filepath)[1] + " exists yet in the project\n\n" +\
                     "Do you want to replace the current file?"
                 answer = tkmessagebox.askyesno(title="Filename not unique",
                                                message=message)
                 if answer:
-                   #answer is True
-                   core = os.path.split(filepath)[1].split(".")[0]
-                   os.remove(os.path.join(self.wdir, core + ".csv"))
+                    #answer is True
+                    core = os.path.split(filepath)[1].split(".")[0]
+                    
+                    annotations_filename =  core + ".csv"
+                    if annotations_filename in files_list:
+                        os.remove(annotations_filename)
+                        
+                    masks_filename = core + "_mask.json"
+                    if masks_filename in files_list:
+                        os.remove(masks_filename)
                 else:
                     #answer is False
-                    continue                   
-                
-            #copy the file
+                    continue
+
+            # copy the file
             src = filepath
             dst = os.path.join(self.wdir, os.path.split(filepath)[1])
             shutil.copy(src, dst)
             
-            #Load the first image which is imported
-            #under the condition that there is currently no image loaded
+            #save the mask template
+            if self.settings.default_mask_template is not None:
+                masks_dict = self.settings.default_mask_template
+                masks_filename = self.wdir + "/" +\
+                    os.path.split(filepath)[1].split(".")[0] + "_mask.json"
+                
+                f = open(masks_filename, 'w')
+                json.dump(masks_dict, f)
+                f.close()
+
+            # Load the first image which is imported
+            # under the condition that there is currently no image loaded
             if first_file and (self.annotation_canvas.image_name is None):
                 first_file = False
                 self.annotation_canvas.load_image(dst, full_path=True)
                 
-    def modify_annotation_settings(self):
-        AnnotationSettings(self)
-    
-    def modify_skeleton_settings(self):
-        SkeletonSettings(self)
 
-#%% Start mainloop
+    def modify_settings(self):
+        SettingsDialog(self)
 
-#adjust DPI to screen resolution
+    def update_visualisations(self):
+        self.annotation_canvas.update_image(mode=0)
+        self.skeleton_canvas.update_image(mode=0)
+
+    def import_mask_template(self):
+        ImportMaskTemplateDialog(self)
+        
+    def save_mask_template(self):
+        SaveMaskTemplateDialog(self)
+        
+    def manage_mask_templates(self):
+        MaskTemplateManager(self)
+
+# %% Start mainloop
+
+
+# adjust DPI to screen resolution
 ctypes.windll.shcore.SetProcessDpiAwareness(1)
 
-#start mainloop
+# start mainloop
 root = tk.Tk()
 soft_dir = os.getcwd()
 app = Application(master=root, program_dir=soft_dir)

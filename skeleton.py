@@ -55,35 +55,35 @@ class Skeleton():
 
     def __init__(self):
         #name of the keypoints
-        self.keypoints = []
+        self.keypoints = None
         #list (n), containing the names of the keypoints. The names of the keypoints
         #are given as strings. Keypoint names may not contain spaces
 
         #coordinates of the keypoints
-        self.coordinates = []
+        self.coordinates = None
         #numpy array with dimensions (n, 2) containing the coordinates of the
         #keypoints as [x, y]. Images have their origin in the right top, the
         #x-axis is horizontal, the y-axis is vertical
 
         #indices of the parent keypoints
-        self.parent = []
+        self.parent = None
         #numpy array with dimensions (n), containing the indices of the parent
         #keypoints. The central keypoint has parent -1
 
         #color of the keypoints
-        self.color = []
+        self.color = None
         #list (n), containing the colors with which the keypoints should be displayed
         #colors are stored in a list with three elements and are specified
         #according to the RGB convention (integers between 0 and 255)
 
         #annotation order
-        self.annotation_order = []
+        self.annotation_order = None
         #list (n), each keypoint is assigned an annotation order (integer) starting
         #from zero for the first point which should be annotated, and increase
         #in steps of one.
 
         #functional annotation order
-        self.func_annotation_order = []
+        self.func_annotation_order = None
         #list (n), the first element of func_annotation_order contains the index of
         #the first keypoint which should be annotated. The second element of
         #func_annotation_order contains the index of the second keypoint which
@@ -93,6 +93,9 @@ class Skeleton():
         #can be used directly by the software to look up the index of the next
         #keypoint to annotate. This limits the number of comparisons the software
         #has to execute, thereby speeding up the code
+        
+        self.image = None
+        #background image for skeleton
 
     def check_hierarchy(self):
         """
@@ -151,3 +154,45 @@ class Skeleton():
                             used_connections[j] = True
 
         return classified_keypoints == len(self.keypoints)
+    
+    def marginal_keypoint_index(self, i):
+        """
+        Find marginal keypoint index of keypoint with real keypoint index i
+
+        Parameters
+        ----------
+        i : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        pass
+    
+    def keypoint_index(self, i):
+        """
+        find real keypoint index of keypoint with marginal keypoint index i
+
+        Parameters
+        ----------
+        i : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        return self.func_annotation_order[i]
+    
+    @property
+    def n_keypoints(self):
+        """
+        Get number of keypoints in the skeleton
+        """
+        if self.keypoints is None:
+            return None
+        return len(self.keypoints)

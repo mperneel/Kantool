@@ -74,9 +74,15 @@ class GeneralImageCanvas(tk.Canvas):
 
         #assign master
         self.master = master
+        
+        #get size of grey border
+        if 'bd' in kwargs:            
+            self.bd = kwargs['bd']
+        else:
+            self.bd = 0
 
         #initiate image
-        self.image_photoimage = self.create_image(0, 0, anchor='nw')
+        self.image_photoimage = self.create_image(self.bd, self.bd, anchor='nw')
         self._image_photoimage = None #variable to store PhotoImage
 
         #working directory
@@ -131,11 +137,11 @@ class GeneralImageCanvas(tk.Canvas):
             self.zoom_delta_y = max(0, y_zoom_center_image * s - event.y)
 
             #if image fits on self.self, intercepts have to be 0
-            self.zoom_delta_x = min(max(0, self.image.shape[1] * self.zoom_level -\
-                                        self.winfo_width()),
+            self.zoom_delta_x = min(max(0, self.image.shape[1] * self.zoom_level +\
+                                        2 * self.bd - self.winfo_width()),
                                     self.zoom_delta_x)
-            self.zoom_delta_y = min(max(0, self.image.shape[0] * self.zoom_level -\
-                                        self.winfo_height()),
+            self.zoom_delta_y = min(max(0, self.image.shape[0] * self.zoom_level +\
+                                        2 * self.bd - self.winfo_height()),
                                     self.zoom_delta_y)
 
             #convert intercepts to integers
@@ -165,11 +171,12 @@ class GeneralImageCanvas(tk.Canvas):
             self.zoom_delta_y = max(0, self.zoom_delta_y)
 
             #if image fits on self, intercepts have to be 0
-            self.zoom_delta_x = min(max(0, self.image.shape[1] * self.zoom_level -\
-                                        self.winfo_width()),
+            #important to take the margins of the frame into account
+            self.zoom_delta_x = min(max(0, self.image.shape[1] * self.zoom_level +\
+                                        2 * self.bd - self.winfo_width()),
                                     self.zoom_delta_x)
-            self.zoom_delta_y = min(max(0, self.image.shape[0] * self.zoom_level -\
-                                        self.winfo_height()),
+            self.zoom_delta_y = min(max(0, self.image.shape[0] * self.zoom_level +\
+                                        2 * self.bd - self.winfo_height()),
                                     self.zoom_delta_y)
 
             #convert intercepts to integers
@@ -202,10 +209,14 @@ class GeneralImageCanvas(tk.Canvas):
         """
         if self.image is not None:
             image_height, image_width = self.image.shape[:2]
-            uw = self.winfo_width()
-            uh = self.winfo_height()
+            uw = self.winfo_width() - 2 * self.bd
+            uh = self.winfo_height() - 2 * self.bd
             self.zoom_level = min(uw/image_width, uh/image_height)
-            self.update_image(mode=0)
+            
+            #when the zoom level is reset, the intercepts should be zero,
+            #since the image will fit exactly in the canvas
+            self.zoom_delta_x = 0 #left intercept
+            self.zoom_delta_y = 0 #top intercept
 
     def update_image(self, mode=0):
         """
