@@ -143,22 +143,26 @@ class Application(tk.Frame):
                                    command=self.export_dataset)
         self.menubar.add_cascade(label="File", menu=self.file_menu)
 
-        self.master.bind("<Control-Shift-O>",
+        self.master.bind("<Control-Shift-O>",\
                          lambda event: self.open_project())
-        self.master.bind("<Control-Shift-N>", lambda event: self.new_project())
-        self.master.bind(
-            "<Control-o>", lambda event: self.annotation_canvas.open_image())
-        self.master.bind(
-            "<Control-w>", lambda event: self.annotation_canvas.close_image())
-        self.master.bind("<Control-Delete>",
+        self.master.bind("<Control-Shift-N>",\
+                         lambda event: self.new_project())
+        self.master.bind("<Control-o>",\
+                         lambda event: self.annotation_canvas.open_image())
+        self.master.bind("<Control-w>",\
+                         lambda event: self.annotation_canvas.close_image())
+        self.master.bind("<Control-Delete>",\
                          lambda event: self.annotation_canvas.delete_object())
-        self.master.bind(
-            "<F7>", lambda event: self.annotation_canvas.switch_image(direction=-1))
-        self.master.bind(
-            "<F8>", lambda event: self.annotation_canvas.switch_image(direction=1))
-        self.master.bind("<Control-i>", lambda event: self.import_images())
-        self.master.bind("<F5>", lambda event: self.export_dataset())
-        self.master.bind("<Key-Delete>", lambda event: self.delete_keypoint())
+        self.master.bind("<F7>",\
+                         lambda event: self.annotation_canvas.switch_image(direction=-1))
+        self.master.bind("<F8>",\
+                         lambda event: self.annotation_canvas.switch_image(direction=1))
+        self.master.bind("<Control-i>",\
+                         lambda event: self.import_images())
+        self.master.bind("<F5>",\
+                         lambda event: self.export_dataset())
+        self.master.bind("<Key-Delete>",\
+                         lambda event: self.delete_keypoint())
         # Delete is bound to two methods therefore a method in the Application
         # class is provoked, which activates on it's turn
         # self.skeleton_canvas.delete_keypoint() or
@@ -173,11 +177,9 @@ class Application(tk.Frame):
         # disable all menu items which may only be used when a project is opened
         self.file_menu.entryconfig("Open image (Ctrl+O)", state="disabled")
         self.file_menu.entryconfig("Close image (Ctrl+W)", state="disabled")
-        self.file_menu.entryconfig(
-            "Save annotations (Ctrl+S)", state="disabled")
+        self.file_menu.entryconfig("Save annotations (Ctrl+S)", state="disabled")
         self.file_menu.entryconfig("Delete keypoint (Del)", state="disabled")
-        self.file_menu.entryconfig(
-            "Delete object (Ctrl+Del)", state="disabled")
+        self.file_menu.entryconfig("Delete object (Ctrl+Del)", state="disabled")
         self.file_menu.entryconfig("Previous image (F7)", state="disabled")
         self.file_menu.entryconfig("Next image (F8)", state="disabled")
         self.file_menu.entryconfig("Import image (Ctrl+I)", state="disabled")

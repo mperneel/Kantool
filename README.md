@@ -1,2 +1,0 @@
-# Kantool
-Keypoint annotation tool
